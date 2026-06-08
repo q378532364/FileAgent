@@ -1,0 +1,38 @@
+{
+  "name": "weiyi_talk",
+  "version": "1.0.0",
+  "description": "A CLI tool for weiyi_talk",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "FileAgent": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
+    "preinstall": "npx only-allow pnpm"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/langgraph": "^1.3.6",
+    "@langchain/openai": "^1.4.7",
+    "fs-extra": "^11.3.5",
+    "openai": "^6.42.0",
+    "sqlite3": "^6.0.1",
+    "trash": "^10.1.1",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "pnpm": ">=8.0.0"
+  }
+}

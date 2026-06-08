@@ -1,0 +1,47 @@
+[
+  {
+    "action": "rename",
+    "details": {
+      "from": "/Users/liuwei/Desktop/FileAgent/workspace/old.txt",
+      "to": "/Users/liuwei/Desktop/FileAgent/workspace/new.txt"
+    },
+    "timestamp": "2026-06-08T14:27:32.646Z"
+  },
+  {
+    "action": "move",
+    "details": {
+      "from": "/Users/liuwei/Desktop/FileAgent/workspace/new.txt",
+      "to": "/Users/liuwei/Desktop/FileAgent/workspace/subdir/new.txt"
+    },
+    "timestamp": "2026-06-08T14:27:32.648Z"
+  },
+  {
+    "action": "batch_rename",
+    "details": {
+      "directory": "/Users/liuwei/Desktop/FileAgent/workspace",
+      "pattern": "log_{n}.txt",
+      "results": [
+        {
+          "oldName": "a.log",
+          "newName": "log_2.txt"
+        },
+        {
+          "oldName": "b.log",
+          "newName": "log_3.txt"
+        },
+        {
+          "oldName": "test.txt",
+          "newName": "log_5.txt"
+        }
+      ]
+    },
+    "timestamp": "2026-06-08T14:27:32.649Z"
+  },
+  {
+    "action": "delete",
+    "details": {
+      "path": "/Users/liuwei/Desktop/FileAgent/workspace/subdir/new.txt"
+    },
+    "timestamp": "2026-06-08T14:27:33.431Z"
+  }
+]
