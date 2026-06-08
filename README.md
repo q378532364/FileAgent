@@ -1,3 +1,8 @@
+# file-agent
+
+预计在7月上线一个FileAgent 致力于将文件批量修改 重命名 移动 整理 排序等做成一个agent，在保持不浪费token的情况下有持久记忆功能，它会记住用户的习惯
+
+```text
 file-agent/
 ├── src/
 │   ├── config/             # 全局配置
@@ -20,3 +25,8 @@ file-agent/
 ├── package.json
 ├── pnpm-lock.yaml
 └── tsconfig.json
+```
+
+# 重要的写在后面
+
+目前还没有发布mvp版本，在发布1.0.0之前，结构和方法会发生很大变化，有任何需求可以在issues中提出
