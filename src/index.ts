@@ -8,10 +8,17 @@ import { program } from './command/fileCommands';
 // ─── 命令列表 ──────────────────────────────────────────────
 
 function getAvailableCommands() {
-  const cmds = program._subcommands.map(sub => ({
-    name: sub._name,
-    description: sub._description,
-  }));
+  const seen = new Set<string>();
+  const cmds = program._subcommands
+    .filter(sub => {
+      if (seen.has(sub._name)) return false;
+      seen.add(sub._name);
+      return true;
+    })
+    .map(sub => ({
+      name: sub._name,
+      description: sub._description,
+    }));
   cmds.push({ name: 'help', description: '显示帮助信息' });
   cmds.push({ name: 'tools', description: '列出当前可用工具' });
   cmds.push({ name: 'exit', description: '退出程序' });
@@ -34,6 +41,7 @@ const hintState = {
   selected: 0,
   rowCount: 0,
   pendingCompletion: null as string | null, // Enter 补全的待处理命令
+  argMode: false, // 参数输入模式（禁止触发命令提示）
 };
 
 /** 根据当前输入计算过滤后的命令列表 */
@@ -242,7 +250,7 @@ process.stdin.on('keypress', (_str: string, key: any) => {
   }
 
   // ── 提示未显示时：检测是否开始输入 / ──
-  if (line.startsWith('/')) {
+  if (!hintState.argMode && line.startsWith('/')) {
     hintState.filtered = calcFiltered(line);
     hintState.selected = 0;
     renderHints();
@@ -267,11 +275,17 @@ const main = async () => {
         hintState.pendingCompletion = null;
         readline.clearLine(process.stdout, 0);
         readline.cursorTo(process.stdout, 0);
-        process.stdout.write(cmdName + ' ');
-        rl.question('> ', async (argInput) => {
+        // 用 rl.write 写入命令名（同步更新 readline 内部行缓冲区）
+        rl.write(cmdName + ' ');
+        // 进入参数输入模式，禁止触发命令提示
+        hintState.argMode = true;
+        // 显示参数输入提示
+        rl.setPrompt('> ');
+        rl.prompt();
+        // 注册一次性监听器获取参数
+        rl.once('line', async (argInput: string) => {
+          hintState.argMode = false;
           const arg = argInput.trim();
-          readline.clearLine(process.stdout, 0);
-          readline.cursorTo(process.stdout, 0);
           const fullCmd = arg ? `${cmdName} ${arg}` : cmdName;
           try {
             const shouldExit = await handleCommand(fullCmd);
