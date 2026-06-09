@@ -1,22 +1,19 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { CONFIG } from '../config/env';
 import { logAction } from '../db/sqlite';
+import { resolvePath } from '../utils/path';
 
 export const moveFile = async (src: string, dest: string) => {
-  const absoluteSrc = path.isAbsolute(src) 
-    ? src 
-    : path.resolve(CONFIG.WORKSPACE_PATH, src);
-  
-  const absoluteDest = path.isAbsolute(dest) 
-    ? dest 
-    : path.resolve(CONFIG.WORKSPACE_PATH, dest);
+  const absoluteSrc = resolvePath(src);
+  const absoluteDest = resolvePath(dest);
 
-  if (!absoluteSrc.startsWith(CONFIG.WORKSPACE_PATH) || !absoluteDest.startsWith(CONFIG.WORKSPACE_PATH)) {
-    throw new Error('拒绝访问：只允许在 workspace 目录内操作。');
+  // 检查源文件是否存在
+  const srcExists = await fs.pathExists(absoluteSrc);
+  if (!srcExists) {
+    return `源文件不存在：${absoluteSrc}`;
   }
 
   await fs.move(absoluteSrc, absoluteDest, { overwrite: true });
   await logAction('move', { from: absoluteSrc, to: absoluteDest });
-  return `已将 ${path.basename(absoluteSrc)} 移动到 ${dest}。`;
+  return `已将 ${path.basename(absoluteSrc)} 移动到 ${absoluteDest}。`;
 };

@@ -1,19 +1,19 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { CONFIG } from '../config/env';
 import { logAction } from '../db/sqlite';
+import { resolvePath } from '../utils/path';
 
 export const renameFile = async (oldPath: string, newName: string) => {
-  const absoluteOld = path.isAbsolute(oldPath) 
-    ? oldPath 
-    : path.resolve(CONFIG.WORKSPACE_PATH, oldPath);
-  
+  const absoluteOld = resolvePath(oldPath);
+
+  // 检查源文件是否存在
+  const exists = await fs.pathExists(absoluteOld);
+  if (!exists) {
+    return `文件不存在：${absoluteOld}`;
+  }
+
   const dir = path.dirname(absoluteOld);
   const absoluteNew = path.resolve(dir, newName);
-
-  if (!absoluteOld.startsWith(CONFIG.WORKSPACE_PATH) || !absoluteNew.startsWith(CONFIG.WORKSPACE_PATH)) {
-    throw new Error('拒绝访问：只允许在 workspace 目录内操作。');
-  }
 
   await fs.rename(absoluteOld, absoluteNew);
   await logAction('rename', { from: absoluteOld, to: absoluteNew });
@@ -25,12 +25,12 @@ export const renameFile = async (oldPath: string, newName: string) => {
  * Example pattern: "doc_{n}.txt" where {n} is index
  */
 export const batchRename = async (directory: string, pattern: string) => {
-  const absoluteDir = path.isAbsolute(directory) 
-    ? directory 
-    : path.resolve(CONFIG.WORKSPACE_PATH, directory);
+  const absoluteDir = resolvePath(directory);
 
-  if (!absoluteDir.startsWith(CONFIG.WORKSPACE_PATH)) {
-    throw new Error('拒绝访问：只允许在 workspace 目录内操作。');
+  // 检查目录是否存在
+  const dirExists = await fs.pathExists(absoluteDir);
+  if (!dirExists) {
+    return `目录不存在：${absoluteDir}`;
   }
 
   const files = await fs.readdir(absoluteDir);

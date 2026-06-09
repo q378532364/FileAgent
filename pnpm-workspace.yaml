@@ -5,3 +5,6 @@ packages:
   - 'apps/*'
   # 排除测试或文档目录
   - '!**/test/**'
+allowBuilds:
+  esbuild: set this to true or false
+  sqlite3: set this to true or false

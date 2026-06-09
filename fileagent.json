@@ -43,5 +43,26 @@
       "path": "/Users/liuwei/Desktop/FileAgent/workspace/subdir/new.txt"
     },
     "timestamp": "2026-06-08T14:27:33.431Z"
+  },
+  {
+    "action": "delete",
+    "details": {
+      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\workspace\\ls"
+    },
+    "timestamp": "2026-06-09T03:20:09.200Z"
+  },
+  {
+    "action": "delete",
+    "details": {
+      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\workspace\\1.txt"
+    },
+    "timestamp": "2026-06-09T03:38:50.881Z"
+  },
+  {
+    "action": "delete",
+    "details": {
+      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\workspace\\1.txt"
+    },
+    "timestamp": "2026-06-09T05:22:52.698Z"
   }
 ]

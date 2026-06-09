@@ -9,29 +9,19 @@ import { program } from "./command/fileCommands";
 
 function getAvailableCommands() {
   const seen = new Set<string>();
-  const cmds: { name: string; description: string }[] = [];
-  
-  // 遍历所有子命令，按名称严格去重（保留首次出现）
-  for (const sub of program._subcommands) {
-    if (!seen.has(sub._name)) {
+  const cmds = program._subcommands
+    .filter((sub) => {
+      if (seen.has(sub._name)) return false;
       seen.add(sub._name);
-      cmds.push({ name: sub._name, description: sub._description });
-    }
-  }
-  
-  // 追加内置命令（同样去重）
-  const builtins = [
-    { name: "help", description: "显示帮助信息" },
-    { name: "tools", description: "列出当前可用工具" },
-    { name: "exit", description: "退出程序" },
-  ];
-  for (const b of builtins) {
-    if (!seen.has(b.name)) {
-      seen.add(b.name);
-      cmds.push(b);
-    }
-  }
-  
+      return true;
+    })
+    .map((sub) => ({
+      name: sub._name,
+      description: sub._description,
+    }));
+  cmds.push({ name: "help", description: "显示帮助信息" });
+  cmds.push({ name: "tools", description: "列出当前可用工具" });
+  cmds.push({ name: "exit", description: "退出程序" });
   return cmds;
 }
 
@@ -232,19 +222,18 @@ process.stdin.on("keypress", (_str: string, key: any) => {
       return;
     }
 
-    // Enter：内联补全命令名，让 question 回调处理后续
+    // Enter：标记待补全，让 question 回调弹出参数输入框
     if (key.name === "return") {
       const chosen = hintState.filtered[hintState.selected];
+      clearHints();
       if (chosen) {
-        // 如果用户已经输入了参数（如 "/d 1.txt"），直接提交不拦截
         const afterCmd = line.slice(1 + chosen.name.length);
-        if (!afterCmd.trim()) {
-          // 只有命令名没有参数 → 标记待补全
+        // 命令名不完整 或 完整但没有参数 → 弹出参数输入框
+        if (!line.startsWith(`/${chosen.name}`) || !afterCmd.trim()) {
           hintState.pendingCompletion = `/${chosen.name}`;
         }
-        // 如果有参数，不设 pendingCompletion，走正常提交流程
       }
-      clearHints();
+      // 让 question 回调正常触发
       return;
     }
 
@@ -343,20 +332,23 @@ const main = async () => {
       clearHints();
 
       // ── 处理 Enter 选择命令后的参数输入 ──
-      // 参考 Claude Code：选中命令后，命令名作为下一行 prompt 内联显示，
-      // 用户在同行直接输入参数（只输入参数部分，不含命令名）
       if (hintState.pendingCompletion) {
-        const cmd = hintState.pendingCompletion;
+        const cmdName = hintState.pendingCompletion;
         hintState.pendingCompletion = null;
-
-        // rl.question 以命令名 + 空格为 prompt（例：/delete ），
-        // 用户只需要输入参数（例：1.txt），回调中收到的仅参数部分
+        readline.clearLine(process.stdout, 0);
+        readline.cursorTo(process.stdout, 0);
+        // 用 rl.write 写入命令名（同步更新 readline 内部行缓冲区）
+        rl.write(cmdName + " ");
+        // 进入参数输入模式，禁止触发命令提示
         hintState.argMode = true;
-        rl.question(cmd + " ", async (args) => {
+        // 显示参数输入提示
+        rl.setPrompt("> ");
+        rl.prompt();
+        // 注册一次性监听器获取参数
+        rl.once("line", async (argInput: string) => {
           hintState.argMode = false;
-          const rest = args.trim();
-          const fullCmd = rest ? cmd + " " + rest : cmd;
-
+          const arg = argInput.trim();
+          const fullCmd = arg ? `${cmdName} ${arg}` : cmdName;
           try {
             const shouldExit = await handleCommand(fullCmd);
             if (shouldExit) {
@@ -365,7 +357,7 @@ const main = async () => {
               return;
             }
           } catch (error: any) {
-            console.error(`\n命令执行出错：${error?.message || error}`);
+            console.error(`命令执行出错：${error?.message || error}`);
           }
           ask();
         });

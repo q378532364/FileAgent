@@ -9,32 +9,17 @@ export interface SubCommand {
   action: (args: string[], options: Record<string, string | boolean>) => void;
 }
 
-function showBanner(): void {
-  const banner = `
-  ╔══════════════════════════════════════════╗
-  ║     ██╗    ██╗███████╗██╗██╗   ██╗██╗  ║
-  ║     ██║    ██║██╔════╝██║╚██╗ ██╔╝██║  ║
-  ║     ██║ █╗ ██║█████╗  ██║ ╚████╔╝ ██║  ║
-  ║     ██║███╗██║██╔══╝  ██║  ╚██╔╝  ██║  ║
-  ║     ╚███╔███╔╝███████╗██║   ██║   ██║  ║
-  ║      ╚══╝╚══╝ ╚══════╝╚═╝   ╚═╝   ╚═╝  ║
-  ║──────────────────────────────────────────║
-  ║     ✦  一个可以帮你操作任意文件的工具  ✦           ║
-  ╚══════════════════════════════════════════╝
-  `;
-  console.log(banner);
-}
 
 export class Command {
-  private _name = "";
-  private _description = "";
-  private _version = "";
-  private _options: CommandOption[] = [];
-  private _subcommands: SubCommand[] = [];
-  private _action?: (
+  public _name = "";
+  public _description = "";
+  public _version = "";
+  public _options: CommandOption[] = [];
+  public _subcommands: Command[] = [];
+  public _action?: (
     args: string[],
     options: Record<string, string | boolean>,
-  ) => void;
+  ) => void | Promise<void>;
 
   name(n: string): this {
     this._name = n;
@@ -57,54 +42,61 @@ export class Command {
   }
 
   command(name: string): Command {
-    const sub = new Command();
-    this._subcommands.push({ name, description: "", action: () => {} });
+    const sub = new Command().name(name);
+    this._subcommands.push(sub);
     return sub;
   }
 
   descriptionForSub(name: string, desc: string): this {
-    const cmd = this._subcommands.find((c) => c.name === name);
-    if (cmd) cmd.description = desc;
+    const cmd = this._subcommands.find((c) => c._name === name);
+    if (cmd) cmd.description(desc);
     return this;
   }
 
   action(
-    fn: (args: string[], options: Record<string, string | boolean>) => void,
+    fn: (args: string[], options: Record<string, string | boolean>) => void | Promise<void>,
   ): this {
     this._action = fn;
     return this;
   }
 
-  parse(argv: string[]): void {
+  async parse(argv: string[]): Promise<void> {
     const args = argv.slice(2);
 
     if (args.length === 0) {
-      showBanner();
+      if (this._action) {
+        await this._action([], {});
+        return;
+      }
+     
       this.showHelp();
       return;
     }
 
     if (args[0] === "--help" || args[0] === "-h") {
-      showBanner();
+     
       this.showHelp();
       return;
     }
 
     if (args[0] === "--version" || args[0] === "-V") {
-      showBanner();
+     
       console.log(`  Version: ${this._version}\n`);
       return;
     }
 
     const subName = args[0];
-    const sub = this._subcommands.find((c) => c.name === subName);
+    const sub = this._subcommands.find((c) => c._name === subName);
     if (sub) {
-      sub.action(args.slice(1), {});
+      await sub.parse(['', '', ...args.slice(1)]);
       return;
     }
 
     if (this._action) {
-      this._action(args, {});
+      await this._action(args, {});
+    } else {
+      console.error(`未知命令: ${subName}`);
+      this.showHelp();
     }
   }
 
@@ -117,7 +109,7 @@ export class Command {
     if (this._subcommands.length > 0) {
       console.log("  COMMANDS\n");
       for (const sub of this._subcommands) {
-        console.log(`    ${sub.name.padEnd(16)} ${sub.description}`);
+        console.log(`    ${sub._name.padEnd(16)} ${sub._description}`);
       }
       console.log("");
     }

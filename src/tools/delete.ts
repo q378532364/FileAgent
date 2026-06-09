@@ -1,17 +1,18 @@
 import trash from 'trash';
 import path from 'path';
-import { CONFIG } from '../config/env';
+import fs from 'fs-extra';
 import { logAction } from '../db/sqlite';
+import { resolvePath } from '../utils/path';
 
 export const safeDelete = async (filePath: string) => {
-  const absolutePath = path.isAbsolute(filePath) 
-    ? filePath 
-    : path.resolve(CONFIG.WORKSPACE_PATH, filePath);
+  const absolutePath = resolvePath(filePath);
 
-  if (!absolutePath.startsWith(CONFIG.WORKSPACE_PATH)) {
-    throw new Error('拒绝访问：不能删除 workspace 目录外的文件。');
+  // 检查文件是否存在
+  const exists = await fs.pathExists(absolutePath);
+  if (!exists) {
+    return `文件不存在：${absolutePath}`;
   }
-
+  
   await trash(absolutePath);
   await logAction('delete', { path: absolutePath });
   return `已将 ${path.basename(absolutePath)} 移入回收站。`;
