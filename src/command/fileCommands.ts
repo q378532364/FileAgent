@@ -2,6 +2,8 @@ import { Command } from './index';
 import { safeDelete } from '../tools/delete';
 import { moveFile } from '../tools/move';
 import { renameFile, batchRename } from '../tools/rename';
+import { createFile } from '../tools/create';
+import { runCode } from '../tools/exec';
 
 export const program = new Command()
   .name('FileAgent')
@@ -50,5 +52,37 @@ program.command('batch-rename')
       return;
     }
     const result = await batchRename(args[0], args[1]);
+    console.log(result);
+  });
+
+program.command('create')
+  .description('创建文件或目录（无后缀则创建目录）')
+  .action(async (args) => {
+    if (args.length < 1) {
+      console.log('用法: /create <路径>');
+      console.log('  有后缀 → 创建文件，如 /create notes.txt');
+      console.log('  无后缀 → 创建目录，如 /create docs');
+      return;
+    }
+    const result = await createFile(args[0]);
+    console.log(result);
+  });
+
+program.command('time')
+  .description('查看当前时间')
+  .action(async (args) => {
+    const fmt = args[0] || 'datetime';
+    const code = `
+      const now = new Date();
+      const formats = {
+        iso: () => now.toISOString(),
+        date: () => now.toISOString().slice(0, 10),
+        time: () => now.toTimeString().slice(0, 8),
+        unix: () => Math.floor(now.getTime() / 1000).toString(),
+        datetime: () => now.toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false }),
+      };
+      return (formats['${fmt}'] || formats.datetime)();
+    `;
+    const result = await runCode(code);
     console.log(result);
   });

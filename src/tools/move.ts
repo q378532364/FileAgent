@@ -7,7 +7,6 @@ export const moveFile = async (src: string, dest: string) => {
   const absoluteSrc = resolvePath(src);
   const absoluteDest = resolvePath(dest);
 
-  // 检查源文件是否存在
   const srcExists = await fs.pathExists(absoluteSrc);
   if (!srcExists) {
     return `源文件不存在：${absoluteSrc}`;
@@ -15,5 +14,5 @@ export const moveFile = async (src: string, dest: string) => {
 
   await fs.move(absoluteSrc, absoluteDest, { overwrite: true });
   await logAction('move', { from: absoluteSrc, to: absoluteDest });
-  return `已将 ${path.basename(absoluteSrc)} 移动到 ${absoluteDest}。`;
+  return `已将 ${path.basename(absoluteSrc)} 移动到 ${absoluteDest}`;
 };

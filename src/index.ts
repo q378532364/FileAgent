@@ -1,28 +1,51 @@
+#!/usr/bin/env node
 import readline from "readline";
 
 import { graph } from "./agent/graph";
 import { initDb } from "./db/sqlite";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, BaseMessage } from "@langchain/core/messages";
 import { program } from "./command/fileCommands";
+import { CONFIG } from "./config/env";
+import { extractAndSaveMemory, clearMemory } from "./memo/index";
+import { undoLastAction } from "./undo";
+import enquirer from "enquirer";
+const { AutoComplete, Input } = enquirer;
+
+// ─── ANSI 颜色常量 ──────────────────────────────────────────
+const C = {
+  dim: "\x1b[2m",
+  bold: "\x1b[1m",
+  cyan: "\x1b[36m",
+  yellow: "\x1b[33m",
+  green: "\x1b[32m",
+  gray: "\x1b[90m",
+  white: "\x1b[97m",
+  reset: "\x1b[0m",
+};
+
+// ─── 会话状态 ────────────────────────────────────────────────
+let conversationHistory: BaseMessage[] = [];
+let totalTokensUsed = 0;
+let maxContextTokens = 128000; // 默认上下文窗口
 
 // ─── 命令列表 ──────────────────────────────────────────────
 
 function getAvailableCommands() {
   const seen = new Set<string>();
   const cmds: { name: string; description: string }[] = [];
-  
-  // 遍历所有子命令，按名称严格去重（保留首次出现）
+
   for (const sub of program._subcommands) {
     if (!seen.has(sub._name)) {
       seen.add(sub._name);
       cmds.push({ name: sub._name, description: sub._description });
     }
   }
-  
-  // 追加内置命令（同样去重）
+
   const builtins = [
     { name: "help", description: "显示帮助信息" },
     { name: "tools", description: "列出当前可用工具" },
+    { name: "undo", description: "撤销上一次文件操作" },
+    { name: "clear", description: "清除上下文和会话历史" },
     { name: "exit", description: "退出程序" },
   ];
   for (const b of builtins) {
@@ -31,7 +54,7 @@ function getAvailableCommands() {
       cmds.push(b);
     }
   }
-  
+
   return cmds;
 }
 
@@ -43,98 +66,58 @@ function showHelp(): void {
   console.log("");
 }
 
-// ─── 轻量级内联提示系统 ────────────────────────────────────
+function showContextUsage(): void {
+  const usedK = (totalTokensUsed / 1000).toFixed(1);
+  const percent = ((totalTokensUsed / maxContextTokens) * 100).toFixed(1);
+  const barLen = 20;
+  const filled = Math.round((totalTokensUsed / maxContextTokens) * barLen);
+  const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+  console.log(
+    `  ${C.gray}上下文: ${C.green}${usedK}k${C.gray} (${percent}%) ${C.cyan}${bar}${C.reset}`
+  );
+}
 
-const hintState = {
-  active: false,
-  filtered: [] as { name: string; description: string }[],
-  selected: 0,
-  rowCount: 0,
-  pendingCompletion: null as string | null, // Enter 补全的待处理命令
-  argMode: false, // 参数输入模式（禁止触发命令提示）
-};
+// ─── 命令向导 ──────────────────────────────────────────────
 
-/** 根据当前输入计算过滤后的命令列表 */
-function calcFiltered(line: string) {
+async function runCommandWizard(initialCmd?: string): Promise<boolean> {
+  let selectedCmd = initialCmd;
   const cmds = getAvailableCommands();
-  if (!line.startsWith("/")) return [];
-  const afterSlash = line.slice(1);
-  const spaceIdx = afterSlash.indexOf(" ");
-  const cmdPart = spaceIdx >= 0 ? afterSlash.slice(0, spaceIdx) : afterSlash;
-  if (!cmdPart) return cmds;
-  return cmds.filter((c) => c.name.startsWith(cmdPart));
-}
 
-/** 将提示列表渲染到输入行下方 */
-function renderHints() {
-  const { filtered, selected } = hintState;
-
-  // 先清除上一次渲染
-  if (hintState.active && hintState.rowCount > 0) {
-    process.stdout.write("\x1b[s"); // save cursor
-    process.stdout.write("\x1b[" + (hintState.rowCount + 1) + "B"); // 移到提示区下方
-    for (let i = hintState.rowCount; i > 0; i--) {
-      process.stdout.write("\x1b[" + i + "A"); // 逐行上移
-      process.stdout.write("\x1b[2K"); // 清除该行
-    }
-    process.stdout.write("\x1b[u"); // restore cursor
-  }
-
-  if (filtered.length === 0) {
-    hintState.active = false;
-    hintState.rowCount = 0;
-    return;
-  }
-
-  hintState.active = true;
-
-  // ── 垂直列表渲染（命令名 + 描述分两行） ──
-  process.stdout.write("\x1b[s"); // 保存光标（在输入行）
-  process.stdout.write("\n"); // 换到下一行开始绘制
-
-  for (let i = 0; i < filtered.length; i++) {
-    const c = filtered[i];
-    const cmdName = "/" + c.name;
-
-    if (i > 0) process.stdout.write("\n");
-
-    // 命令名行
-    process.stdout.write("\x1b[2K");
-    if (i === selected) {
-      process.stdout.write("\x1b[7m" + cmdName + "\x1b[0m");
-    } else {
-      process.stdout.write("\x1b[36m" + cmdName + "\x1b[0m");
+  while (true) {
+    if (!selectedCmd) {
+      try {
+        selectedCmd = await new AutoComplete({
+          name: "cmd",
+          message: "请选择命令",
+          limit: 10,
+          choices: cmds.map((c) => ({
+            name: c.name,
+            message: `/${c.name.padEnd(15)} ${c.description}`,
+          })),
+        }).run();
+      } catch (e) {
+        return false;
+      }
     }
 
-    // 描述行
-    process.stdout.write("\n");
-    process.stdout.write("\x1b[2K");
-    if (i === selected) {
-      process.stdout.write("\x1b[7m  " + c.description + "\x1b[0m");
-    } else {
-      process.stdout.write("\x1b[90m  " + c.description + "\x1b[0m");
+    if (selectedCmd && ["help", "tools", "exit", "clear", "undo"].includes(selectedCmd)) {
+      const shouldExit = await handleCommand(`/${selectedCmd}`);
+      return shouldExit;
+    }
+
+    try {
+      const args = await new Input({
+        name: "args",
+        message: `请输入 /${selectedCmd} 对应的参数 (按 Esc 重新选择命令):`,
+      }).run();
+
+      const fullCmd = `/${selectedCmd} ${args}`.trim();
+      const shouldExit = await handleCommand(fullCmd);
+      return shouldExit;
+    } catch (e) {
+      selectedCmd = undefined;
     }
   }
-
-  hintState.rowCount = filtered.length * 2;
-  process.stdout.write("\x1b[u"); // 恢复光标到输入行
-}
-
-/** 清除提示区域 */
-function clearHints() {
-  if (!hintState.active || hintState.rowCount === 0) {
-    hintState.active = false;
-    return;
-  }
-  process.stdout.write("\x1b[s");
-  process.stdout.write("\x1b[" + (hintState.rowCount + 1) + "B");
-  for (let i = hintState.rowCount; i > 0; i--) {
-    process.stdout.write("\x1b[" + i + "A");
-    process.stdout.write("\x1b[2K");
-  }
-  process.stdout.write("\x1b[u");
-  hintState.active = false;
-  hintState.rowCount = 0;
 }
 
 // ─── 命令执行 ──────────────────────────────────────────────
@@ -154,6 +137,23 @@ async function handleCommand(fullInput: string): Promise<boolean> {
     case "help":
       showHelp();
       return false;
+    case "clear":
+      conversationHistory = [];
+      totalTokensUsed = 0;
+      await clearMemory();
+      console.log(
+        `  ${C.green}✓ 上下文已清除，会话历史已重置${C.reset}`
+      );
+      return false;
+    case "undo": {
+      const result = await undoLastAction();
+      if (result.success) {
+        console.log(`  ${C.green}✓ ${result.message}${C.reset}`);
+      } else {
+        console.log(`  ${C.yellow}${result.message}${C.reset}`);
+      }
+      return false;
+    }
     case "tools":
       console.log("\n当前可用工具：");
       const { agentTools } = await import("./agent/nodes");
@@ -179,95 +179,6 @@ async function handleCommand(fullInput: string): Promise<boolean> {
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  completer: (line: string) => {
-    if (line.startsWith("/")) {
-      const cmds = getAvailableCommands().map((c) => `/${c.name}`);
-      const hits = cmds.filter((c) => c.startsWith(line));
-      return [hits.length ? hits : cmds, line];
-    }
-    return [[], line];
-  },
-});
-
-// ─── 提示交互：键盘事件 ────────────────────────────────────
-
-process.stdin.on("keypress", (_str: string, key: any) => {
-  if (!key) return;
-  const line = rl.line;
-
-  // ── 提示正在显示时的交互 ──
-  if (hintState.active) {
-    // 方向键：移动选择
-    if (key.name === "up" || key.name === "down") {
-      const dir = key.name === "up" ? -1 : 1;
-      hintState.selected = Math.max(
-        0,
-        Math.min(hintState.filtered.length - 1, hintState.selected + dir),
-      );
-      renderHints();
-      return;
-    }
-    if (key.name === "left" || key.name === "right") {
-      const dir = key.name === "left" ? -1 : 1;
-      hintState.selected = Math.max(
-        0,
-        Math.min(hintState.filtered.length - 1, hintState.selected + dir),
-      );
-      renderHints();
-      return;
-    }
-
-    // Tab：选中当前高亮命令并写入输入行
-    if (key.name === "tab") {
-      const chosen = hintState.filtered[hintState.selected];
-      if (chosen) {
-        clearHints();
-        rl.pause();
-        readline.clearLine(process.stdout, 0);
-        readline.cursorTo(process.stdout, 0);
-        rl.write(`/${chosen.name} `);
-        rl.resume();
-        rl.prompt(true);
-      }
-      return;
-    }
-
-    // Enter：内联补全命令名，让 question 回调处理后续
-    if (key.name === "return") {
-      const chosen = hintState.filtered[hintState.selected];
-      if (chosen) {
-        // 如果用户已经输入了参数（如 "/d 1.txt"），直接提交不拦截
-        const afterCmd = line.slice(1 + chosen.name.length);
-        if (!afterCmd.trim()) {
-          // 只有命令名没有参数 → 标记待补全
-          hintState.pendingCompletion = `/${chosen.name}`;
-        }
-        // 如果有参数，不设 pendingCompletion，走正常提交流程
-      }
-      clearHints();
-      return;
-    }
-
-    // Escape：关闭提示
-    if (key.name === "escape") {
-      clearHints();
-      rl.pause();
-      rl.resume();
-      rl.prompt(true);
-      return;
-    }
-
-    // 其他按键：清除提示，让 readline 正常处理输入
-    clearHints();
-    return;
-  }
-
-  // ── 提示未显示时：检测是否开始输入 / ──
-  if (!hintState.argMode && line.startsWith("/")) {
-    hintState.filtered = calcFiltered(line);
-    hintState.selected = 0;
-    renderHints();
-  }
 });
 
 function showBanner(): void {
@@ -277,50 +188,38 @@ function showBanner(): void {
   const B = "\x1b[1m";
   const R = "\x1b[0m";
 
-  // 计算去掉 ANSI 后的可见字符数，确保 pad 精确
   const vlen = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").length;
-  const padL = (s: string, w: number) => s + " ".repeat(Math.max(0, w - vlen(s)));
+  const padL = (s: string, w: number) =>
+    s + " ".repeat(Math.max(0, w - vlen(s)));
   const padC = (s: string, w: number) => {
     const vl = vlen(s);
     const lt = Math.floor((w - vl) / 2);
-    return " ".repeat(Math.max(0, lt)) + s + " ".repeat(Math.max(0, w - vl - lt));
+    return (
+      " ".repeat(Math.max(0, lt)) + s + " ".repeat(Math.max(0, w - vl - lt))
+    );
   };
   const cl = (t: string, c: string) => `${c}${t}${R}`;
 
   const cwd = process.cwd();
   const cwdDisp = cwd.length > 29 ? cwd.slice(0, 26) + "..." : cwd;
 
-  const LW = 35; // 左栏宽
-  const RW = 40; // 右栏宽
-  // 总宽 = │(1) + 左(35) + │(1) + 右(40) + │(1) = 78
+  const LW = 35;
+  const RW = 40;
 
-  // 文件图标 (3 行像素画)
-  const icon = [
-    "┌──────┐",
-    "│ █▄▄█ │",
-    "└──────┘",
-  ];
+  const icon = ["┌──────┐", "│ █▄▄█ │", "└──────┘"];
 
   const banner = [
     "",
     `${O}╭─── ${R}${B}${W}FileAgent v0.0.2${R} ${O}${"─".repeat(53)}╮${R}`,
     `${O}│${R}${" ".repeat(76)}${O}│${R}`,
-    // Welcome back!  |  Tips header
     `${O}│${R}${padC(cl("Welcome back!", B + W), LW)}${O}│${R}${padL(cl("Tips for getting started", O), RW)}${O}│${R}`,
-    // (blank)        |  tip 1
     `${O}│${R}${" ".repeat(LW)}${O}│${R}${padL(cl("Run ", D) + cl("/help", W) + cl(" to see all commands.", D), RW)}${O}│${R}`,
-    // file icon[0]   |  tip 2
     `${O}│${R}${padC(cl(icon[0], O), LW)}${O}│${R}${padL(cl("Type ", D) + cl("/tools", W) + cl(" to browse tools.", D), RW)}${O}│${R}`,
-    // file icon[1]   |  (blank)
     `${O}│${R}${padC(cl(icon[1], O), LW)}${O}│${R}${" ".repeat(RW)}${O}│${R}`,
-    // file icon[2]   |  (blank)
     `${O}│${R}${padC(cl(icon[2], O), LW)}${O}│${R}${" ".repeat(RW)}${O}│${R}`,
-    // model info     |  separator
-    `${O}│${R}${padL(cl("Qwen-Max · API Usage", W), LW)}${O}│${R}${O}${"─".repeat(RW)}${R}${O}│${R}`,
-    // cwd            |  Recent activity
-    `${O}│${R}${padL(cl(cwdDisp, D), LW)}${O}│${R}${padL(cl("Recent activity", O), RW)}${O}│${R}`,
-    // (blank)        |  No recent activity
-    `${O}│${R}${" ".repeat(LW)}${O}│${R}${padL(cl("No recent activity", D), RW)}${O}│${R}`,
+    `${O}│${R}${padL(cl(`${CONFIG.OPENAI_MODEL} · API Usage`, W), LW)}${O}│${R}${O}${"─".repeat(RW)}${R}${O}│${R}`,
+    `${O}│${R}${padL(cl(cwdDisp, D), LW)}${O}│${R}${padL(cl("Type /clear to reset context", O), RW)}${O}│${R}`,
+    `${O}│${R}${" ".repeat(LW)}${O}│${R}${" ".repeat(RW)}${O}│${R}`,
     `${O}│${R}${" ".repeat(76)}${O}│${R}`,
     `${O}╰${"─".repeat(76)}╯${R}`,
     "",
@@ -339,95 +238,88 @@ const main = async () => {
 
   const ask = () => {
     rl.question("> ", async (input) => {
-      // 每次提交都清除残留提示
-      clearHints();
+      const trimmed = input.trim();
 
-      // ── 处理 Enter 选择命令后的参数输入 ──
-      // 参考 Claude Code：选中命令后，命令名作为下一行 prompt 内联显示，
-      // 用户在同行直接输入参数（只输入参数部分，不含命令名）
-      if (hintState.pendingCompletion) {
-        const cmd = hintState.pendingCompletion;
-        hintState.pendingCompletion = null;
-
-        // rl.question 以命令名 + 空格为 prompt（例：/delete ），
-        // 用户只需要输入参数（例：1.txt），回调中收到的仅参数部分
-        hintState.argMode = true;
-        rl.question(cmd + " ", async (args) => {
-          hintState.argMode = false;
-          const rest = args.trim();
-          const fullCmd = rest ? cmd + " " + rest : cmd;
-
-          try {
-            const shouldExit = await handleCommand(fullCmd);
-            if (shouldExit) {
-              rl.close();
-              process.exit(0);
-              return;
-            }
-          } catch (error: any) {
-            console.error(`\n命令执行出错：${error?.message || error}`);
-          }
-          ask();
-        });
+      // 如果用户直接输入 /，进入向导模式
+      if (trimmed === "/") {
+        rl.pause();
+        const shouldExit = await runCommandWizard();
+        if (shouldExit) {
+          rl.close();
+          process.exit(0);
+          return;
+        }
+        rl.resume();
+        ask();
         return;
       }
-
-      const trimmed = input.trim();
 
       // ── 命令处理 ──
       if (trimmed.startsWith("/")) {
         rl.pause();
         const parts = trimmed.slice(1).trim().split(/\s+/);
         const cmdName = parts[0];
+        const args = parts.slice(1);
         const choices = getAvailableCommands();
 
-        // 命令名完全匹配 → 直接执行
         const exactMatch = cmdName && choices.find((c) => c.name === cmdName);
         if (exactMatch) {
-          try {
-            const shouldExit = await handleCommand(trimmed);
+          if (args.length === 0) {
+            const shouldExit = await runCommandWizard(cmdName);
             if (shouldExit) {
               rl.close();
               process.exit(0);
               return;
             }
-          } catch (error: any) {
-            console.error(`命令执行出错：${error?.message || error}`);
+          } else {
+            try {
+              const shouldExit = await handleCommand(trimmed);
+              if (shouldExit) {
+                rl.close();
+                process.exit(0);
+                return;
+              }
+            } catch (error: any) {
+              console.error(`命令执行出错：${error?.message || error}`);
+            }
           }
           rl.resume();
           ask();
           return;
         }
 
-        // 命令不完整 → 尝试模糊匹配
         const matching = cmdName
           ? choices.filter((c) => c.name.startsWith(cmdName))
           : choices;
 
         if (matching.length === 1) {
-          // 唯一匹配 → 直接执行（与精确匹配行为一致）
-          const rest = parts.slice(1).join(" ");
-          const fullCmd = `/${matching[0].name}${rest ? " " + rest : ""}`;
-          try {
-            const shouldExit = await handleCommand(fullCmd);
+          if (args.length === 0) {
+            const shouldExit = await runCommandWizard(matching[0].name);
             if (shouldExit) {
               rl.close();
               process.exit(0);
               return;
             }
-          } catch (error: any) {
-            console.error(`命令执行出错：${error?.message || error}`);
+          } else {
+            const fullCmd = `/${matching[0].name} ${args.join(" ")}`;
+            try {
+              const shouldExit = await handleCommand(fullCmd);
+              if (shouldExit) {
+                rl.close();
+                process.exit(0);
+                return;
+              }
+            } catch (error: any) {
+              console.error(`命令执行出错：${error?.message || error}`);
+            }
           }
           rl.resume();
           ask();
           return;
         }
 
-        // 0 或多个匹配 → 文本提示，不弹任何选择器
         if (matching.length === 0) {
-          console.log(
-            `未知命令: ${cmdName || "(空)"}，输入 /help 查看可用命令`,
-          );
+          console.log(`未知命令: ${cmdName || "(空)"}，输入 /help 查看可用命令`);
         } else {
           console.log("可选命令：");
           for (const m of matching) {
@@ -445,13 +337,71 @@ const main = async () => {
         return;
       }
 
+      if (!CONFIG.OPENAI_API_KEY) {
+        console.log("未配置 OPENAI_API_KEY，请在 .env 文件中设置。");
+        ask();
+        return;
+      }
+
       try {
-        const initialState = { messages: [new HumanMessage(trimmed)] };
-        const result = await graph.invoke(initialState);
+        process.stdout.write("思考中...");
+        conversationHistory.push(new HumanMessage(trimmed));
+
+        const initialState = { messages: [...conversationHistory] };
+        const result = await Promise.race([
+          graph.invoke(initialState, { recursionLimit: 10 }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("请求超时（30s）")), 30000)
+          ),
+        ]);
+        process.stdout.write("\r\x1b[K");
+
+        // 更新会话历史
+        conversationHistory = result.messages;
+
         const lastMessage = result.messages[result.messages.length - 1];
-        console.log(`助手：${lastMessage.content}`);
-      } catch (error) {
-        console.error("发生错误：", error);
+
+        // 显示上下文容量
+        showContextUsage();
+
+        // AI 回复：FileAgent 前缀 + 淡色
+        console.log(
+          `${C.cyan}${C.bold}${C.reset} ${C.dim}${lastMessage.content}${C.reset}`
+        );
+
+        // 提取 token 使用量
+        const usage = (lastMessage as any)?.usage_metadata;
+        if (usage) {
+          totalTokensUsed = usage.total_tokens || totalTokensUsed;
+          if (usage.input_tokens) {
+            // 估算上下文窗口（基于模型）
+            const model = CONFIG.OPENAI_MODEL.toLowerCase();
+            if (model.includes("gpt-4o")) maxContextTokens = 128000;
+            else if (model.includes("gpt-4")) maxContextTokens = 8192;
+            else if (model.includes("gpt-3")) maxContextTokens = 4096;
+            else if (model.includes("claude")) maxContextTokens = 200000;
+            else maxContextTokens = 128000;
+          }
+        }
+
+        // 提取工具调用信息用于记忆
+        const toolCalls: { name: string; args: any }[] = [];
+        for (const msg of result.messages) {
+          if (
+            (msg as any).tool_calls &&
+            (msg as any).tool_calls.length > 0
+          ) {
+            for (const tc of (msg as any).tool_calls) {
+              toolCalls.push({ name: tc.name, args: tc.args });
+            }
+          }
+        }
+
+        // 保存短期记忆
+        await extractAndSaveMemory(trimmed, String(lastMessage.content), toolCalls);
+      } catch (error: any) {
+        process.stdout.write("\r\x1b[K");
+        console.error("调用模型失败：", error?.message || error);
       }
       ask();
     });

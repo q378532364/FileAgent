@@ -104,7 +104,7 @@ export class Command {
     const line = "  ──────────────────────────────────────────────";
     console.log(`  ${this._name} - ${this._description}\n`);
     console.log("  USAGE\n");
-    console.log(`    weiyi <command> [options]\n`);
+    console.log(`    ${this._name.toLowerCase()} <command> [options]\n`);
 
     if (this._subcommands.length > 0) {
       console.log("  COMMANDS\n");

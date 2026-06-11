@@ -1,9 +1,54 @@
 [
   {
+    "id": 1,
+    "action": "create",
+    "details": {
+      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\hello.txt",
+      "isDir": false,
+      "content": "hello world"
+    },
+    "timestamp": "2026-06-11T08:42:31.098Z",
+    "undone": true
+  },
+  {
+    "id": 2,
+    "action": "rename",
+    "details": {
+      "from": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\hello.txt",
+      "to": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\world.txt"
+    },
+    "timestamp": "2026-06-11T08:42:31.101Z",
+    "undone": true
+  },
+  {
+    "id": 3,
+    "action": "move",
+    "details": {
+      "from": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\world.txt",
+      "to": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\sub\\world.txt"
+    },
+    "timestamp": "2026-06-11T08:42:31.104Z",
+    "undone": true
+  },
+  {
+    "id": 4,
+    "action": "createDir",
+    "details": {
+      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\empty_dir",
+      "isDir": true
+    },
+    "timestamp": "2026-06-11T08:42:31.106Z",
+    "undone": true
+  },
+  {
+    "id": 5,
     "action": "delete",
     "details": {
-      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\1.txt"
+      "path": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\_test_undo\\sub\\world.txt",
+      "trashPath": "C:\\Users\\zm\\Desktop\\nongye\\FileAgent\\.trash\\2026-06-11T08-42-31-107Z_world.txt\\world.txt",
+      "basename": "world.txt"
     },
-    "timestamp": "2026-06-09T05:33:39.327Z"
+    "timestamp": "2026-06-11T08:42:31.109Z",
+    "undone": true
   }
 ]
