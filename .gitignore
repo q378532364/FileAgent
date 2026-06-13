@@ -6,3 +6,4 @@ dist
 .history
 .env
 .env.local
+*.txt

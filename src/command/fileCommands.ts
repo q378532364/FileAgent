@@ -68,21 +68,4 @@ program.command('create')
     console.log(result);
   });
 
-program.command('time')
-  .description('查看当前时间')
-  .action(async (args) => {
-    const fmt = args[0] || 'datetime';
-    const code = `
-      const now = new Date();
-      const formats = {
-        iso: () => now.toISOString(),
-        date: () => now.toISOString().slice(0, 10),
-        time: () => now.toTimeString().slice(0, 8),
-        unix: () => Math.floor(now.getTime() / 1000).toString(),
-        datetime: () => now.toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false }),
-      };
-      return (formats['${fmt}'] || formats.datetime)();
-    `;
-    const result = await runCode(code);
-    console.log(result);
-  });
+

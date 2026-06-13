@@ -132,16 +132,43 @@ const createFileTool = new DynamicStructuredTool({
 const webSearchTool = new DynamicStructuredTool({
   name: "webSearch",
   description:
-    "Search the web using Bing. Returns titles, URLs, and snippets. Use this when the user needs to find information from the internet.",
+    "Search the web and return titles, URLs, and snippets. Supports multiple engines (auto/google/baidu/bing). Use this to find information from the internet. You can call this multiple times with different queries to gather comprehensive information.",
   schema: z.object({
-    query: z.string().describe("The search query."),
+    query: z.string().describe("The search query. Be specific for better results."),
     maxResults: z
       .number()
       .optional()
       .default(5)
       .describe("Maximum number of results. Default 5."),
+    engine: z
+      .enum(["auto", "google", "baidu", "bing"])
+      .optional()
+      .default("auto")
+      .describe("Search engine to use. Auto tries all and returns first success."),
   }),
-  func: async ({ query, maxResults }) => await tools.webSearch(query, maxResults),
+  func: async ({ query, maxResults, engine }) =>
+    await tools.webSearch(query, maxResults, engine),
+});
+
+const fetchWebpageTool = new DynamicStructuredTool({
+  name: "fetchWebpage",
+  description:
+    "Fetch and extract content from a specific URL. Returns page title, text content, and/or links. Use this after webSearch to read detailed content from promising results.",
+  schema: z.object({
+    url: z.string().describe("The URL to fetch."),
+    extractMode: z
+      .enum(["text", "links", "full"])
+      .optional()
+      .default("text")
+      .describe("What to extract: 'text' for main content, 'links' for hyperlinks, 'full' for both."),
+    maxChars: z
+      .number()
+      .optional()
+      .default(5000)
+      .describe("Maximum characters to extract. Default 5000."),
+  }),
+  func: async ({ url, extractMode, maxChars }) =>
+    await tools.fetchWebpage(url, extractMode, maxChars),
 });
 
 const webSearchAndSaveTool = new DynamicStructuredTool({
@@ -163,9 +190,14 @@ const webSearchAndSaveTool = new DynamicStructuredTool({
       .optional()
       .default("txt")
       .describe("Output format: txt, json, or md."),
+    engine: z
+      .enum(["auto", "google", "baidu", "bing"])
+      .optional()
+      .default("auto")
+      .describe("Search engine to use."),
   }),
-  func: async ({ query, savePath, maxResults, format }) =>
-    await tools.webSearchAndSave(query, savePath, maxResults, format),
+  func: async ({ query, savePath, maxResults, format, engine }) =>
+    await tools.webSearchAndSave(query, savePath, maxResults, format, engine),
 });
 
 // ─── 代码执行工具 ──────────────────────────────────────────
@@ -212,6 +244,7 @@ const rawTools = [
   listFilesTool,
   createFileTool,
   webSearchTool,
+  fetchWebpageTool,
   webSearchAndSaveTool,
 ];
 export const agentTools = rawTools.map(wrapTool);

@@ -1,0 +1,51 @@
+{
+  "habits": [],
+  "preferences": {},
+  "recentInteractions": [
+    {
+      "timestamp": "2026-06-11T14:57:35.555Z",
+      "summary": "[纯对话] 你好"
+    },
+    {
+      "timestamp": "2026-06-11T23:53:54.268Z",
+      "summary": "[调用了: runCode, createFile] 帮我创建1.txt 并且写入1-100的十进制"
+    },
+    {
+      "timestamp": "2026-06-11T23:55:54.293Z",
+      "summary": "[调用了: createFile1] 帮我创建2.txt"
+    },
+    {
+      "timestamp": "2026-06-12T02:54:10.677Z",
+      "summary": "[调用了: createFile] 帮我创建一个1.md文档 里面写一个ptyhon脚本"
+    },
+    {
+      "timestamp": "2026-06-13T14:37:48.234Z",
+      "summary": "[调用了: webSearch, webSearch, webSearch, webSearch] 帮我查询下南京的天气"
+    },
+    {
+      "timestamp": "2026-06-13T14:48:03.883Z",
+      "summary": "[调用了: runCode] 帮我查询下南京的天气"
+    },
+    {
+      "timestamp": "2026-06-13T14:49:12.926Z",
+      "summary": "[纯对话] exit"
+    },
+    {
+      "timestamp": "2026-06-13T14:51:53.397Z",
+      "summary": "[调用了: runCode] 现在是什么时间？"
+    },
+    {
+      "timestamp": "2026-06-13T14:52:25.248Z",
+      "summary": "[调用了: runCode] clear"
+    },
+    {
+      "timestamp": "2026-06-13T14:57:37.695Z",
+      "summary": "[纯对话] 你好"
+    },
+    {
+      "timestamp": "2026-06-13T14:59:25.833Z",
+      "summary": "[调用了: runCode, runCode, createFile] 帮我以今天的日期创建一个文件，然后里面写今天南京的天气，文件命名格式就是日期"
+    }
+  ],
+  "lastUpdated": "2026-06-13T14:59:25.833Z"
+}

@@ -22,10 +22,46 @@ const DEFAULT_MEMORY: UserMemory = {
 
 let memoryCache: UserMemory | null = null;
 
+function normalizeMemory(raw: unknown): UserMemory {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_MEMORY };
+  }
+
+  const candidate = raw as Partial<UserMemory>;
+  return {
+    habits: Array.isArray(candidate.habits)
+      ? candidate.habits.filter((item): item is string => typeof item === "string")
+      : [],
+    preferences:
+      candidate.preferences &&
+      typeof candidate.preferences === "object" &&
+      !Array.isArray(candidate.preferences)
+        ? Object.fromEntries(
+            Object.entries(candidate.preferences).filter(
+              ([key, value]) => typeof key === "string" && typeof value === "string"
+            )
+          )
+        : {},
+    recentInteractions: Array.isArray(candidate.recentInteractions)
+      ? candidate.recentInteractions.filter(
+          (item): item is MemoryEntry =>
+            !!item &&
+            typeof item === "object" &&
+            typeof item.timestamp === "string" &&
+            typeof item.summary === "string"
+        )
+      : [],
+    lastUpdated:
+      typeof candidate.lastUpdated === "string" ? candidate.lastUpdated : "",
+  };
+}
+
 async function loadMemory(): Promise<UserMemory> {
   if (memoryCache) return memoryCache;
   if (await fs.pathExists(CONFIG.MEMORY_PATH)) {
-    memoryCache = await fs.readJson(CONFIG.MEMORY_PATH);
+    const raw = await fs.readJson(CONFIG.MEMORY_PATH);
+    memoryCache = normalizeMemory(raw);
+    await saveMemory();
   } else {
     memoryCache = { ...DEFAULT_MEMORY };
     await saveMemory();

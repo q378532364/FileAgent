@@ -14,12 +14,28 @@ export const runCode = async (
 
   const scriptPath = path.join(SANDBOX_DIR, `_run_${Date.now()}.mjs`);
 
+  // 注入环境变量（支持 API Key 访问）
+  const envVars = JSON.stringify(process.env);
+
   // 包一层 async IIFE + 错误捕获 + 常用模块注入
   const wrapped = `
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const fs = require("fs-extra");
 const path = require("path");
+
+// 注入环境变量
+const env = ${envVars};
+
+// 注入网络请求工具
+const fetch = globalThis.fetch;
+const Headers = globalThis.Headers;
+const Request = globalThis.Request;
+const Response = globalThis.Response;
+const AbortController = globalThis.AbortController;
+const AbortSignal = globalThis.AbortSignal;
+const URL = globalThis.URL;
+const URLSearchParams = globalThis.URLSearchParams;
 
 try {
   const result = await (async () => {

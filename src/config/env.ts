@@ -1,7 +1,11 @@
 import path from "path";
 import dotenv from "dotenv";
 
-dotenv.config();
+// 优先读取当前项目根目录下的 .env，而不是 src/ 目录或系统全局环境。
+dotenv.config({
+  path: path.resolve(process.cwd(), ".env"),
+  override: true,
+});
 
 export const CONFIG = {
   WORKSPACE_PATH: path.resolve(process.cwd()),

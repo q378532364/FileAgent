@@ -11,6 +11,7 @@ import { undoLastAction } from "./undo";
 import enquirer from "enquirer";
 const { AutoComplete, Input } = enquirer;
 
+
 // ─── ANSI 颜色常量 ──────────────────────────────────────────
 const C = {
   dim: "\x1b[2m",
@@ -26,7 +27,9 @@ const C = {
 // ─── 会话状态 ────────────────────────────────────────────────
 let conversationHistory: BaseMessage[] = [];
 let totalTokensUsed = 0;
+let sessionTokensUsed = 0; // 当前会话 token 使用量
 let maxContextTokens = 128000; // 默认上下文窗口
+const CONTEXT_THRESHOLD = 0.8; // 上下文使用率阈值，超过则截断
 
 // ─── 命令列表 ──────────────────────────────────────────────
 
@@ -66,11 +69,68 @@ function showHelp(): void {
   console.log("");
 }
 
+// ─── 模型上下文窗口配置 ──────────────────────────────────────
+function getModelContextWindow(model: string): number {
+  const m = model.toLowerCase();
+  if (m.includes("gpt-4o")) return 128000;
+  if (m.includes("gpt-4-turbo")) return 128000;
+  if (m.includes("gpt-4")) return 8192;
+  if (m.includes("gpt-3.5")) return 16385;
+  if (m.includes("gpt-3")) return 4096;
+  if (m.includes("claude-3")) return 200000;
+  if (m.includes("claude")) return 100000;
+  if (m.includes("deepseek")) return 64000;
+  if (m.includes("qwen")) return 32000;
+  if (m.includes("glm")) return 128000;
+  return 128000; // 默认
+}
+
+// ─── 估算消息 token 数 ──────────────────────────────────────
+function estimateTokens(text: string): number {
+  // 粗略估算：中文约 2 token/字，英文约 0.75 token/word
+  const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  const englishWords = (text.match(/[a-zA-Z]+/g) || []).length;
+  const otherChars = text.length - chineseChars - englishWords;
+  return Math.ceil(chineseChars * 2 + englishWords * 0.75 + otherChars * 0.5);
+}
+
+function estimateMessagesTokens(messages: BaseMessage[]): number {
+  let total = 0;
+  for (const msg of messages) {
+    const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+    total += estimateTokens(content);
+    // 工具调用也占用 token
+    if ((msg as any).tool_calls) {
+      total += estimateTokens(JSON.stringify((msg as any).tool_calls));
+    }
+  }
+  return total;
+}
+
+// ─── 上下文截断 ──────────────────────────────────────────────
+function truncateContext(): void {
+  const currentTokens = estimateMessagesTokens(conversationHistory);
+  const threshold = maxContextTokens * CONTEXT_THRESHOLD;
+
+  if (currentTokens <= threshold) return;
+
+  // 保留最近的消息，确保不超过阈值
+  // 策略：从前往后删除，直到估算 token 数低于阈值
+  while (conversationHistory.length > 2 && estimateMessagesTokens(conversationHistory) > threshold) {
+    // 保留第一条消息（可能是系统消息或第一条用户消息），删除第二条
+    conversationHistory.splice(1, 1);
+  }
+
+  // 更新 token 计数
+  sessionTokensUsed = estimateMessagesTokens(conversationHistory);
+}
+
 function showContextUsage(): void {
-  const usedK = (totalTokensUsed / 1000).toFixed(1);
-  const percent = ((totalTokensUsed / maxContextTokens) * 100).toFixed(1);
+  // 显示当前会话的上下文使用情况
+  const usedK = (sessionTokensUsed / 1000).toFixed(1);
+  const percent = ((sessionTokensUsed / maxContextTokens) * 100).toFixed(1);
   const barLen = 20;
-  const filled = Math.round((totalTokensUsed / maxContextTokens) * barLen);
+  const filled = Math.round((sessionTokensUsed / maxContextTokens) * barLen);
   const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
   console.log(
     `  ${C.gray}上下文: ${C.green}${usedK}k${C.gray} (${percent}%) ${C.cyan}${bar}${C.reset}`
@@ -140,6 +200,7 @@ async function handleCommand(fullInput: string): Promise<boolean> {
     case "clear":
       conversationHistory = [];
       totalTokensUsed = 0;
+      sessionTokensUsed = 0;
       await clearMemory();
       console.log(
         `  ${C.green}✓ 上下文已清除，会话历史已重置${C.reset}`
@@ -206,7 +267,7 @@ function showBanner(): void {
   const LW = 35;
   const RW = 40;
 
-  const icon = ["┌──────┐", "│ █▄▄█ │", "└──────┘"];
+  const icon = ["┌──────┐", "│██╱╱██│", "└──────┘"];
 
   const banner = [
     "",
@@ -372,17 +433,23 @@ const main = async () => {
         // 提取 token 使用量
         const usage = (lastMessage as any)?.usage_metadata;
         if (usage) {
-          totalTokensUsed = usage.total_tokens || totalTokensUsed;
-          if (usage.input_tokens) {
-            // 估算上下文窗口（基于模型）
-            const model = CONFIG.OPENAI_MODEL.toLowerCase();
-            if (model.includes("gpt-4o")) maxContextTokens = 128000;
-            else if (model.includes("gpt-4")) maxContextTokens = 8192;
-            else if (model.includes("gpt-3")) maxContextTokens = 4096;
-            else if (model.includes("claude")) maxContextTokens = 200000;
-            else maxContextTokens = 128000;
-          }
+          // 累加 token 使用量（而非覆盖）
+          const inputTokens = usage.input_tokens || 0;
+          const outputTokens = usage.output_tokens || 0;
+          totalTokensUsed += inputTokens + outputTokens;
+          sessionTokensUsed += inputTokens + outputTokens;
+
+          // 更新上下文窗口（基于模型）
+          maxContextTokens = getModelContextWindow(CONFIG.OPENAI_MODEL);
+        } else {
+          // 如果没有 usage_metadata，用估算值
+          const estimatedTokens = estimateTokens(String(lastMessage.content));
+          totalTokensUsed += estimatedTokens;
+          sessionTokensUsed += estimatedTokens;
         }
+
+        // 截断上下文以防止超出窗口
+        truncateContext();
 
         // 提取工具调用信息用于记忆
         const toolCalls: { name: string; args: any }[] = [];

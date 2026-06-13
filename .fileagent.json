@@ -50,5 +50,85 @@
     },
     "timestamp": "2026-06-11T08:42:31.109Z",
     "undone": true
+  },
+  {
+    "id": 6,
+    "action": "create",
+    "details": {
+      "path": "/Users/liuwei/Desktop/FileAgent/1.txt",
+      "isDir": false,
+      "content": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100"
+    },
+    "timestamp": "2026-06-11T23:53:52.958Z"
+  },
+  {
+    "id": 7,
+    "action": "create",
+    "details": {
+      "path": "/Users/liuwei/Desktop/FileAgent/2.txt",
+      "isDir": false,
+      "content": ""
+    },
+    "timestamp": "2026-06-11T23:55:53.170Z"
+  },
+  {
+    "id": 8,
+    "action": "create",
+    "details": {
+      "path": "/Users/liuwei/Desktop/FileAgent/1.md",
+      "isDir": false,
+      "content": "```python\n# 这是一个 Python 脚本示例\nprint(\"Hello, World!\")\n```"
+    },
+    "timestamp": "2026-06-12T02:54:08.875Z"
+  },
+  {
+    "id": 9,
+    "action": "webSearch",
+    "details": {
+      "query": "React vs Vue 2024",
+      "resultCount": 3,
+      "engine": "auto"
+    },
+    "timestamp": "2026-06-13T14:44:40.474Z"
+  },
+  {
+    "id": 10,
+    "action": "fetchWebpage",
+    "details": {
+      "url": "https://zh-hans.react.dev/learn",
+      "title": "快速入门 – React 中文文档",
+      "contentLength": 1000
+    },
+    "timestamp": "2026-06-13T14:44:42.327Z"
+  },
+  {
+    "id": 11,
+    "action": "webSearch",
+    "details": {
+      "query": "南京天气",
+      "resultCount": 2,
+      "engine": "google"
+    },
+    "timestamp": "2026-06-13T14:45:11.523Z"
+  },
+  {
+    "id": 12,
+    "action": "webSearch",
+    "details": {
+      "query": "南京天气",
+      "resultCount": 2,
+      "engine": "bing"
+    },
+    "timestamp": "2026-06-13T14:45:12.343Z"
+  },
+  {
+    "id": 13,
+    "action": "create",
+    "details": {
+      "path": "/Users/liuwei/Desktop/FileAgent/2026-06-13.txt",
+      "isDir": false,
+      "content": "📅 日期：2026年6月13日\n📍 地点：南京\n\n🌤 天气概况\n━━━━━━━━━━━━━━━━━━━━\n天气状况：多云 (Partly cloudy)\n当前温度：23°C\n体感温度：25°C\n💧 湿度：69%\n🌬 风速：10 km/h（东南偏东风）\n🕐 观测时间：14:36\n\n☀️ 祝您今天心情愉快！\n"
+    },
+    "timestamp": "2026-06-13T14:59:23.454Z"
   }
 ]
